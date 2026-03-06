@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Generator</title>
-    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -14,6 +13,9 @@
             background: #0d1117;
             color: #c9d1d9;
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         header {
@@ -26,28 +28,17 @@
         header h1 { font-size: 1.6rem; font-weight: 700; color: #f0f6fc; letter-spacing: -0.02em; }
         header p  { margin-top: 6px; font-size: 0.88rem; color: #8b949e; }
 
-        .form-wrapper {
-            max-width: 720px;
-            margin: 0 auto;
-            padding: 36px 24px 0;
-        }
+        main { width: 100%; max-width: 720px; padding: 36px 24px 60px; }
 
         .upload-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            margin-bottom: 28px;
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 16px; margin-bottom: 28px;
         }
 
         .upload-card {
-            background: #161b22;
-            border: 1.5px dashed #30363d;
-            border-radius: 10px;
-            padding: 22px 18px;
-            text-align: center;
-            cursor: pointer;
-            transition: border-color 0.2s, background 0.2s;
-            position: relative;
+            background: #161b22; border: 1.5px dashed #30363d; border-radius: 10px;
+            padding: 22px 18px; text-align: center; cursor: pointer;
+            transition: border-color 0.2s, background 0.2s; position: relative;
         }
         .upload-card:hover { border-color: #58a6ff; background: #1a2030; }
         .upload-card.has-file { border-color: #3fb950; border-style: solid; }
@@ -96,42 +87,22 @@
         .status-bar .msg { font-size: 0.82rem; vertical-align: middle; }
         .status-bar .msg.error { color: #f85149; }
 
-        /* Dashboard area */
-        .dashboard-section { display: none; padding: 24px; }
-        .dashboard-section.visible { display: block; }
+        .result { margin-top: 32px; display: none; text-align: center; }
+        .result.visible { display: block; }
+        .result img { width: 100%; border-radius: 10px; border: 1px solid #21262d; margin-bottom: 18px; }
 
-        .dashboard-title {
-            text-align: center; font-size: 1.3rem; font-weight: 700; color: #f0f6fc;
-            margin-bottom: 16px;
-        }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(8, 1fr);
-            grid-template-rows: 380px 380px;
-            gap: 8px;
-            min-width: 1100px;
-        }
-        .dashboard-scroll { overflow-x: auto; }
-
-        .chart-cell { background: #0d1117; border-radius: 6px; min-height: 0; }
-        .c1 { grid-column: 1 / 3; }
-        .c2 { grid-column: 3 / 5; }
-        .c3 { grid-column: 5 / 7; }
-        .c4 { grid-column: 7 / 8; }
-        .c5 { grid-column: 8 / 9; }
-        .c6 { grid-column: 1 / 3; }
-        .c7 { grid-column: 3 / 5; }
-        .c8 { grid-column: 5 / 7; }
-        .c9 { grid-column: 7 / 9; }
-
-        .btn-row { text-align: center; margin-top: 24px; padding-bottom: 40px; }
         .btn-download {
-            display: inline-block; padding: 12px 32px; background: #238636; color: #fff;
-            font-size: 0.9rem; font-weight: 600; border: none; border-radius: 8px;
+            display: inline-block; padding: 10px 28px; background: #238636; color: #fff;
+            font-size: 0.88rem; font-weight: 600; border: none; border-radius: 8px;
             cursor: pointer; transition: opacity 0.2s; text-decoration: none;
         }
         .btn-download:hover { opacity: 0.88; }
+
+        .runtime-note {
+            text-align: center; margin-top: 10px; font-size: 0.72rem; color: #484f58;
+            min-height: 18px;
+        }
+        .runtime-note.ready { color: #3fb950; }
 
         @media (max-width: 560px) { .upload-grid { grid-template-columns: 1fr; } }
     </style>
@@ -140,10 +111,10 @@
 
 <header>
     <h1>Dashboard Generator</h1>
-    <p>Upload your data files and generate the delivery dashboard — runs entirely in your browser</p>
+    <p>Upload your data files and generate the delivery dashboard &mdash; runs entirely in your browser</p>
 </header>
 
-<div class="form-wrapper">
+<main>
     <form id="dash-form">
         <div class="upload-grid">
             <div class="upload-card" id="card-delivery">
@@ -185,468 +156,509 @@
         </div>
         <button type="submit" class="btn-generate" id="btn-gen">Generate Dashboard</button>
         <div class="status-bar" id="status"></div>
+        <div class="runtime-note" id="runtime-note">Loading Python runtime in background&hellip;</div>
     </form>
-</div>
 
-<div class="dashboard-section" id="dashboard-section">
-    <div class="dashboard-title" id="dashboard-title"></div>
-    <div class="dashboard-scroll">
-        <div class="dashboard-grid">
-            <div class="chart-cell c1" id="chart1"></div>
-            <div class="chart-cell c2" id="chart2"></div>
-            <div class="chart-cell c3" id="chart3"></div>
-            <div class="chart-cell c4" id="chart4"></div>
-            <div class="chart-cell c5" id="chart5"></div>
-            <div class="chart-cell c6" id="chart6"></div>
-            <div class="chart-cell c7" id="chart7"></div>
-            <div class="chart-cell c8" id="chart8"></div>
-            <div class="chart-cell c9" id="chart9"></div>
-        </div>
+    <div class="result" id="result">
+        <img id="result-img" src="" alt="Generated Dashboard">
+        <a class="btn-download" id="btn-dl" href="#" download="dashboard.png">Download PNG</a>
     </div>
-    <div class="btn-row">
-        <button class="btn-download" id="btn-dl">Download PNG</button>
-    </div>
-</div>
+</main>
+
+<!-- The exact Python dashboard code, executed via Pyodide -->
+<script type="text/python" id="py-code">
+import json
+import io
+import datetime
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from collections import Counter, defaultdict
+import csv
+
+COLORS = {
+    'purple': '#8B5CF6',
+    'lavender': '#A78BFA',
+    'orange': '#F97316',
+    'blue': '#3B82F6',
+    'cyan': '#06B6D4',
+    'green': '#10B981',
+    'red': '#EF4444',
+    'pink': '#EC4899',
+    'yellow': '#FBBF24',
+}
+
+def _apply_dark_theme():
+    plt.style.use('dark_background')
+    plt.rcParams['figure.facecolor'] = '#0d1117'
+    plt.rcParams['axes.facecolor'] = '#161b22'
+    plt.rcParams['axes.edgecolor'] = '#30363d'
+    plt.rcParams['axes.labelcolor'] = '#c9d1d9'
+    plt.rcParams['xtick.color'] = '#c9d1d9'
+    plt.rcParams['ytick.color'] = '#c9d1d9'
+    plt.rcParams['text.color'] = '#c9d1d9'
+
+def _read_text(raw):
+    if isinstance(raw, bytes):
+        return raw.decode('utf-8', errors='replace')
+    return raw
+
+def mime_to_short(mime):
+    mime_map = {
+        'text/csv': 'CSV', 'application/json': 'JSON', 'application/pdf': 'PDF',
+        'application/x-zip-compressed': 'X-ZIP-COMP', 'application/zip': 'ZIP',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+        'image/png': 'PNG', 'image/jpeg': 'JPEG',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+    }
+    return mime_map.get(mime, mime.split('/')[-1].upper()[:10] if mime else 'Unknown')
+
+def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes=None, ocr_bytes=None, title=None):
+    _apply_dark_theme()
+
+    delivery_text = _read_text(delivery_bytes)
+    mime_csv_text = _read_text(mime_csv_bytes)
+    grader_text = _read_text(grader_bytes) if grader_bytes else None
+
+    ocr_classification_data = {}
+    if ocr_bytes:
+        try:
+            ocr_classification_data = json.loads(_read_text(ocr_bytes))
+        except Exception:
+            pass
+
+    ocr_rubrics = ocr_classification_data.get('ocr_rubrics', [])
+    non_ocr_rubrics = ocr_classification_data.get('non_ocr_rubrics', [])
+    ocr_disagreements = Counter()
+    non_ocr_disagreements = Counter()
+    for r in ocr_rubrics:
+        for dtype in r.get('disagreement_types', []):
+            ocr_disagreements[dtype] += 1
+    for r in non_ocr_rubrics:
+        for dtype in r.get('disagreement_types', []):
+            non_ocr_disagreements[dtype] += 1
+
+    has_grader_data = False
+    human_gpt5 = 0
+    human_gemini = 0
+    gpt5_gemini = 0
+
+    if grader_text:
+        grader_data = defaultdict(lambda: defaultdict(dict))
+        for line in grader_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = json.loads(line)
+                task_id = d.get('task_id')
+                model_name = d.get('model_name')
+                grader = d.get('grader')
+                comparisons = d.get('comparisons', [])
+                grader_data[task_id][model_name][grader] = comparisons
+            except json.JSONDecodeError:
+                continue
+
+        human_gpt5_pairs = []
+        human_gemini_pairs = []
+        gpt5_gemini_pairs = []
+
+        for task_id, models in grader_data.items():
+            for model_name, grader_results in models.items():
+                gpt52_comps = grader_results.get('gpt52', [])
+                gemini_comps = grader_results.get('gemini3pro', grader_results.get('gemini3flash', []))
+                for comp in gpt52_comps:
+                    human_gpt5_pairs.append((comp.get('existing'), comp.get('grader')))
+                for comp in gemini_comps:
+                    human_gemini_pairs.append((comp.get('existing'), comp.get('grader')))
+                if gpt52_comps and gemini_comps:
+                    gpt52_by_id = {c['rubric_id']: c['grader'] for c in gpt52_comps}
+                    gemini_by_id = {c['rubric_id']: c['grader'] for c in gemini_comps}
+                    common_ids = set(gpt52_by_id.keys()) & set(gemini_by_id.keys())
+                    for rid in common_ids:
+                        gpt5_gemini_pairs.append((gpt52_by_id[rid], gemini_by_id[rid]))
+
+        def calc_agreement(pairs):
+            valid = [(a, b) for a, b in pairs if a is not None and b is not None]
+            if not valid:
+                return 0, 0
+            agreed = sum(1 for a, b in valid if a == b)
+            return (agreed / len(valid)) * 100, len(valid)
+
+        human_gpt5, _ = calc_agreement(human_gpt5_pairs)
+        human_gemini, _ = calc_agreement(human_gemini_pairs)
+        gpt5_gemini, _ = calc_agreement(gpt5_gemini_pairs)
+        has_grader_data = True
+
+    tasks = []
+    for line in delivery_text.splitlines():
+        line = line.strip()
+        if line:
+            tasks.append(json.loads(line))
+
+    if not tasks:
+        raise ValueError("delivery.jsonl contained 0 tasks")
+
+    mime_data = {}
+    reader = csv.DictReader(io.StringIO(mime_csv_text))
+    for row in reader:
+        task_id = row.get('TASK_ID', '').strip()
+        if task_id:
+            input_mimes = row.get('ATTACHMENTS_S3_MIME_TYPE', '').strip()
+            output_mimes = row.get('GOLDEN_MIME_TYPE', '').strip()
+            input_list = [m.strip() for m in input_mimes.split('\n') if m.strip()]
+            output_list = []
+            if output_mimes:
+                try:
+                    output_list = json.loads(output_mimes)
+                except json.JSONDecodeError:
+                    output_list = [m.strip() for m in output_mimes.split('\n') if m.strip()]
+            mime_data[task_id] = {'input': input_list, 'output': output_list}
+
+    domains = Counter()
+    input_types = Counter()
+    output_types = Counter()
+    input_files_per_task = []
+    output_files_per_task = []
+    rubrics_per_task = []
+    critical_per_task = []
+    model_grades = defaultdict(list)
+    model_unweighted = defaultdict(list)
+
+    for task in tasks:
+        task_id = task.get('task_id')
+        domains[task.get('metadata', {}).get('domain', 'Unknown')] += 1
+        if task_id in mime_data:
+            input_list = mime_data[task_id]['input']
+            input_files_per_task.append(len(input_list))
+            for mime in input_list:
+                input_types[mime_to_short(mime)] += 1
+            output_list = mime_data[task_id]['output']
+            if not output_list:
+                golden_urls = task.get('golden_solution', {}).get('solution_attachments', [])
+                output_files_per_task.append(len(golden_urls))
+                for _ in golden_urls:
+                    output_types['Unknown'] += 1
+            else:
+                output_files_per_task.append(len(output_list))
+                for mime in output_list:
+                    output_types[mime_to_short(mime)] += 1
+
+        rubrics = task.get('rubrics', [])
+        rubrics_per_task.append(len(rubrics))
+        critical_per_task.append(sum(1 for r in rubrics if r.get('critical_classification') == 'critical criteria'))
+        non_critical_rubrics = [r for r in rubrics if r.get('critical_classification') != 'critical criteria']
+        total_points = sum(r.get('max_points', 0) for r in non_critical_rubrics)
+        rubric_lookup = {r['id']: r for r in rubrics}
+
+        for output in task.get('model_outputs', []):
+            model = output.get('model_name')
+            if model == 'GPT5':
+                continue
+            grades = output.get('rubric_grades', [])
+            grade_map = {g['criteria_id']: g for g in grades}
+            earned = sum(
+                rubric_lookup[rid].get('max_points', 0) for rid, g in grade_map.items()
+                if g.get('is_satisfied') == 'True' and rid in rubric_lookup
+                and rubric_lookup[rid].get('critical_classification') != 'critical criteria'
+            )
+            passed = sum(1 for g in grades if g.get('is_satisfied') == 'True')
+            if total_points > 0:
+                model_grades[model].append(earned / total_points * 100)
+                model_unweighted[model].append(passed / len(rubrics) * 100)
+
+    total_tasks = len(tasks)
+
+    if title is None:
+        now = datetime.datetime.now()
+        title = f'{total_tasks} Task Delivery ({now.month}/{now.day:02d}/{now.year})'
+
+    fig = plt.figure(figsize=(24, 14))
+    fig.suptitle(title, fontsize=18, fontweight='bold', color='white', y=0.98)
+    gs = fig.add_gridspec(2, 8, hspace=0.4, wspace=0.35, top=0.92, bottom=0.08, left=0.04, right=0.98)
+
+    ax1 = fig.add_subplot(gs[0, 0:2])
+    domain_items = domains.most_common(10)
+    domain_names = [d[0][:20] + '...' if len(d[0]) > 20 else d[0] for d in domain_items]
+    domain_pcts = [d[1] / total_tasks * 100 for d in domain_items]
+    y_pos = range(len(domain_names))
+    bars = ax1.barh(y_pos, domain_pcts, color=COLORS['lavender'], edgecolor='white', linewidth=0.5)
+    ax1.set_yticks(y_pos)
+    ax1.set_yticklabels(domain_names, fontsize=8)
+    ax1.invert_yaxis()
+    ax1.set_xlabel('% of Tasks', fontsize=9)
+    for bar, pct in zip(bars, domain_pcts):
+        ax1.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2, f'{pct:.1f}%', va='center', fontsize=7)
+    ax1.set_title('Domain Distribution', fontsize=11, fontweight='bold', pad=5)
+
+    ax2 = fig.add_subplot(gs[0, 2:4])
+    input_items = input_types.most_common(10)
+    type_names = [t[0] for t in input_items]
+    type_pcts = [t[1] / total_tasks * 100 for t in input_items]
+    y_pos = range(len(type_names))
+    colors_list = [COLORS['orange'] if i == 0 else COLORS['blue'] for i in range(len(type_names))]
+    bars = ax2.barh(y_pos, type_pcts, color=colors_list, edgecolor='white', linewidth=0.5)
+    ax2.set_yticks(y_pos)
+    ax2.set_yticklabels(type_names, fontsize=9)
+    ax2.invert_yaxis()
+    ax2.set_xlabel('% of Tasks', fontsize=9)
+    for bar, pct in zip(bars, type_pcts):
+        ax2.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2, f'{pct:.1f}%', va='center', fontsize=7)
+    ax2.set_title('Input File Type Distribution', fontsize=11, fontweight='bold', pad=5)
+
+    ax3 = fig.add_subplot(gs[0, 4:6])
+    output_items = output_types.most_common(10)
+    type_names = [t[0] for t in output_items]
+    type_pcts = [t[1] / total_tasks * 100 for t in output_items]
+    y_pos = range(len(type_names))
+    bars = ax3.barh(y_pos, type_pcts, color=COLORS['orange'], edgecolor='white', linewidth=0.5)
+    ax3.set_yticks(y_pos)
+    ax3.set_yticklabels(type_names, fontsize=9)
+    ax3.invert_yaxis()
+    ax3.set_xlabel('% of Tasks', fontsize=9)
+    for bar, pct in zip(bars, type_pcts):
+        ax3.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2, f'{pct:.1f}%', va='center', fontsize=7)
+    ax3.set_title('Output File Type Distribution', fontsize=11, fontweight='bold', pad=5)
+
+    ax4 = fig.add_subplot(gs[0, 6])
+    if input_files_per_task:
+        file_counts = Counter(input_files_per_task)
+        x_vals = sorted(file_counts.keys())
+        y_vals = [file_counts[x] / total_tasks * 100 for x in x_vals]
+        bars = ax4.bar(x_vals, y_vals, color=COLORS['orange'], edgecolor='white', linewidth=0.5)
+        ax4.set_xticks(x_vals)
+        for bar, pct in zip(bars, y_vals):
+            if pct > 3:
+                ax4.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1, f'{pct:.0f}%', ha='center', fontsize=8)
+    ax4.set_xlabel('Number of Input Files', fontsize=9)
+    ax4.set_ylabel('% of Tasks', fontsize=9)
+    avg_input = np.mean(input_files_per_task) if input_files_per_task else 0
+    ax4.set_title(f'Input Files per Task\n(avg: {avg_input:.2f})', fontsize=11, fontweight='bold', pad=5)
+
+    ax5 = fig.add_subplot(gs[0, 7])
+    if output_files_per_task:
+        file_counts = Counter(output_files_per_task)
+        x_vals = sorted(file_counts.keys())
+        y_vals = [file_counts[x] / total_tasks * 100 for x in x_vals]
+        bars = ax5.bar(x_vals, y_vals, color=COLORS['orange'], edgecolor='white', linewidth=0.5)
+        ax5.set_xticks(x_vals)
+        for bar, pct in zip(bars, y_vals):
+            if pct > 3:
+                ax5.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1, f'{pct:.0f}%', ha='center', fontsize=8)
+    ax5.set_xlabel('Number of Output Files', fontsize=9)
+    ax5.set_ylabel('% of Tasks', fontsize=9)
+    avg_output = np.mean(output_files_per_task) if output_files_per_task else 0
+    ax5.set_title(f'Output Files per Task\n(avg: {avg_output:.2f})', fontsize=11, fontweight='bold', pad=5)
+
+    ax6 = fig.add_subplot(gs[1, 0:2])
+    if rubrics_per_task:
+        min_r, max_r = min(rubrics_per_task), max(rubrics_per_task)
+        bins = range(min_r, max_r + 2)
+        ax6.hist(rubrics_per_task, bins=bins, color=COLORS['blue'], edgecolor='white', linewidth=0.5, alpha=0.9, align='left')
+    ax6.set_xlabel('Number of Rubrics', fontsize=9)
+    ax6.set_ylabel('Number of Tasks', fontsize=9)
+    ax6.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    mean_val = np.mean(rubrics_per_task) if rubrics_per_task else 0
+    ax6.set_title(f'Total Rubrics per Task\n(avg: {mean_val:.1f})', fontsize=11, fontweight='bold', pad=5)
+
+    ax7 = fig.add_subplot(gs[1, 2:4])
+    if critical_per_task:
+        min_c, max_c = min(critical_per_task), max(critical_per_task)
+        bins = range(min_c, max_c + 2)
+        ax7.hist(critical_per_task, bins=bins, color=COLORS['red'], edgecolor='white', linewidth=0.5, alpha=0.9, align='left')
+    ax7.set_xlabel('Number of Critical Rubrics', fontsize=9)
+    ax7.set_ylabel('Number of Tasks', fontsize=9)
+    ax7.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    mean_val = np.mean(critical_per_task) if critical_per_task else 0
+    ax7.set_title(f'Critical Rubrics per Task\n(avg: {mean_val:.1f})', fontsize=11, fontweight='bold', pad=5)
+
+    ax8 = fig.add_subplot(gs[1, 4:6])
+    model_names = list(model_grades.keys())
+    if model_names and any(model_grades.values()):
+        box_data = [model_grades[m] for m in model_names]
+        colors_list = [COLORS['blue'], COLORS['orange']][:len(model_names)]
+        bp = ax8.boxplot(box_data, tick_labels=model_names, patch_artist=True, widths=0.5)
+        for patch, color in zip(bp['boxes'], colors_list):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.8)
+        for median in bp['medians']:
+            median.set_color('white')
+            median.set_linewidth(2)
+        ax8.set_ylabel('Score (%)', fontsize=9)
+        ax8.set_ylim(0, 110)
+        for i, (data, color) in enumerate(zip(box_data, colors_list)):
+            if data:
+                mean = np.mean(data)
+                median = np.median(data)
+                ax8.text(i + 1, median, f'\u03bc={mean:.1f}%', ha='center', va='center',
+                         fontsize=10, color='white', fontweight='bold',
+                         bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.9, edgecolor='none'))
+    ax8.set_title('Weighted Grade\n(points earned / total points)', fontsize=10, fontweight='bold', pad=5)
+
+    ax9 = fig.add_subplot(gs[1, 6:8])
+    if has_grader_data:
+        graders = ['GPT', 'Gemini Pro', 'Human']
+        matrix = np.array([
+            [100.0, gpt5_gemini, human_gpt5],
+            [gpt5_gemini, 100.0, human_gemini],
+            [human_gpt5, human_gemini, 100.0]
+        ])
+        ax9.imshow(matrix, cmap='Greens', vmin=50, vmax=100)
+        ax9.set_xticks(range(len(graders)))
+        ax9.set_yticks(range(len(graders)))
+        ax9.set_xticklabels(graders, fontsize=9, rotation=45, ha='right')
+        ax9.set_yticklabels(graders, fontsize=9)
+        for i in range(len(graders)):
+            for j in range(len(graders)):
+                val = matrix[i, j]
+                text = f'{val:.0f}%'
+                color = 'white' if val < 85 else 'black'
+                ax9.text(j, i, text, ha='center', va='center', fontsize=11, fontweight='bold', color=color)
+    else:
+        ax9.set_xticks([])
+        ax9.set_yticks([])
+        ax9.text(0.5, 0.5, 'No grader data provided', ha='center', va='center',
+                 fontsize=12, color='#8b949e', transform=ax9.transAxes)
+    ax9.set_title('Grader Agreement Matrix (%)', fontsize=11, fontweight='bold', pad=5)
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=150, facecolor='#0d1117', edgecolor='none', bbox_inches='tight')
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+</script>
 
 <script>
-const COLORS = {
-    lavender: '#A78BFA', orange: '#F97316', blue: '#3B82F6',
-    red: '#EF4444', green: '#10B981', cyan: '#06B6D4',
-};
-const PLOTLY_CFG = { displayModeBar: false, responsive: true };
+    let pyodide = null;
+    let pyReady = false;
+    const runtimeNote = document.getElementById('runtime-note');
 
-function baseLayout(title, extra) {
-    return Object.assign({
-        title: { text: title, font: { size: 13, color: '#f0f6fc' }, x: 0.5 },
-        paper_bgcolor: '#0d1117', plot_bgcolor: '#161b22',
-        font: { color: '#c9d1d9', family: '-apple-system, BlinkMacSystemFont, sans-serif', size: 11 },
-        margin: { t: 44, b: 42, l: 50, r: 24 },
-        xaxis: { gridcolor: '#30363d', zerolinecolor: '#30363d' },
-        yaxis: { gridcolor: '#30363d', zerolinecolor: '#30363d' },
-    }, extra || {});
-}
+    async function ensurePyodide(statusEl) {
+        if (pyReady) return;
 
-const mean = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+        const msg = s => { if (statusEl) statusEl.innerHTML = `<span class="spinner"></span><span class="msg">${s}</span>`; };
 
-function topN(obj, n) {
-    return Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n);
-}
+        msg('Loading Python runtime (first time only)&hellip;');
+        pyodide = await loadPyodide();
 
-function counter(arr) {
-    const c = {};
-    for (const v of arr) c[v] = (c[v] || 0) + 1;
-    return c;
-}
+        msg('Installing numpy + matplotlib&hellip;');
+        await pyodide.loadPackage(['numpy', 'matplotlib']);
 
-function readFile(file) {
-    return new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = reject;
-        r.readAsText(file);
-    });
-}
+        msg('Initializing dashboard code&hellip;');
+        const pyCode = document.getElementById('py-code').textContent;
+        await pyodide.runPythonAsync(pyCode);
 
-// ---------- MIME helper ----------
-const MIME_MAP = {
-    'text/csv': 'CSV', 'application/json': 'JSON', 'application/pdf': 'PDF',
-    'application/x-zip-compressed': 'X-ZIP-COMP', 'application/zip': 'ZIP',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
-    'image/png': 'PNG', 'image/jpeg': 'JPEG',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
-};
-function mimeShort(m) {
-    if (MIME_MAP[m]) return MIME_MAP[m];
-    if (!m) return 'Unknown';
-    return (m.split('/').pop() || '').toUpperCase().slice(0, 10);
-}
-
-// ---------- Parsers ----------
-function parseDelivery(text) {
-    return text.split('\n').map(l => l.trim()).filter(Boolean).map(l => JSON.parse(l));
-}
-
-function parseDAMM(text) {
-    const result = Papa.parse(text, { header: true, skipEmptyLines: true });
-    const md = {};
-    for (const row of result.data) {
-        const tid = (row.TASK_ID || '').trim();
-        if (!tid) continue;
-        const inRaw = (row.ATTACHMENTS_S3_MIME_TYPE || '').trim();
-        const outRaw = (row.GOLDEN_MIME_TYPE || '').trim();
-        const inList = inRaw ? inRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
-        let outList = [];
-        if (outRaw) {
-            try { outList = JSON.parse(outRaw); } catch { outList = outRaw.split('\n').map(s => s.trim()).filter(Boolean); }
-        }
-        md[tid] = { input: inList, output: outList };
+        pyReady = true;
+        runtimeNote.textContent = '';
     }
-    return md;
-}
 
-function parseGrader(text) {
-    if (!text) return null;
-    const gd = {};
-    for (const line of text.split('\n')) {
-        const t = line.trim();
-        if (!t) continue;
+    // Preload in background so it's ready when user clicks Generate
+    (async () => {
         try {
-            const d = JSON.parse(t);
-            const tid = d.task_id, mn = d.model_name, gr = d.grader;
-            if (!gd[tid]) gd[tid] = {};
-            if (!gd[tid][mn]) gd[tid][mn] = {};
-            gd[tid][mn][gr] = d.comparisons || [];
-        } catch {}
-    }
-    return gd;
-}
-
-// ---------- Statistics ----------
-function computeStats(tasks, mimeData, graderData) {
-    const domains = {}, inputTypes = {}, outputTypes = {};
-    const inputFilesPerTask = [], outputFilesPerTask = [];
-    const rubricsPerTask = [], criticalPerTask = [];
-    const modelGrades = {};
-
-    for (const task of tasks) {
-        const tid = task.task_id;
-        const dom = (task.metadata || {}).domain || 'Unknown';
-        domains[dom] = (domains[dom] || 0) + 1;
-
-        if (mimeData[tid]) {
-            const il = mimeData[tid].input;
-            inputFilesPerTask.push(il.length);
-            for (const m of il) { const s = mimeShort(m); inputTypes[s] = (inputTypes[s] || 0) + 1; }
-
-            let ol = mimeData[tid].output;
-            if (!ol.length) {
-                const gu = ((task.golden_solution || {}).solution_attachments || []);
-                outputFilesPerTask.push(gu.length);
-                for (const _ of gu) outputTypes['Unknown'] = (outputTypes['Unknown'] || 0) + 1;
-            } else {
-                outputFilesPerTask.push(ol.length);
-                for (const m of ol) { const s = mimeShort(m); outputTypes[s] = (outputTypes[s] || 0) + 1; }
-            }
+            await ensurePyodide(null);
+            runtimeNote.textContent = 'Python runtime ready';
+            runtimeNote.classList.add('ready');
+            setTimeout(() => { runtimeNote.textContent = ''; runtimeNote.classList.remove('ready'); }, 3000);
+        } catch (e) {
+            runtimeNote.textContent = 'Runtime will load when you click Generate';
         }
+    })();
 
-        const rubrics = task.rubrics || [];
-        rubricsPerTask.push(rubrics.length);
-        criticalPerTask.push(rubrics.filter(r => r.critical_classification === 'critical criteria').length);
-
-        const nonCrit = rubrics.filter(r => r.critical_classification !== 'critical criteria');
-        const totalPts = nonCrit.reduce((s, r) => s + (r.max_points || 0), 0);
-        const lookup = {}; for (const r of rubrics) lookup[r.id] = r;
-
-        for (const out of (task.model_outputs || [])) {
-            if (out.model_name === 'GPT5') continue;
-            const gm = {}; for (const g of (out.rubric_grades || [])) gm[g.criteria_id] = g;
-            let earned = 0;
-            for (const [rid, g] of Object.entries(gm)) {
-                if (g.is_satisfied === 'True' && lookup[rid] && lookup[rid].critical_classification !== 'critical criteria')
-                    earned += lookup[rid].max_points || 0;
-            }
-            if (totalPts > 0) {
-                if (!modelGrades[out.model_name]) modelGrades[out.model_name] = [];
-                modelGrades[out.model_name].push(earned / totalPts * 100);
-            }
-        }
-    }
-
-    let hasGrader = false, hg = 0, hgem = 0, gg = 0;
-    if (graderData) {
-        const hgP = [], hgemP = [], ggP = [];
-        for (const models of Object.values(graderData)) {
-            for (const gr of Object.values(models)) {
-                const g5 = gr.gpt52 || [], gem = gr.gemini3pro || gr.gemini3flash || [];
-                for (const c of g5) hgP.push([c.existing, c.grader]);
-                for (const c of gem) hgemP.push([c.existing, c.grader]);
-                if (g5.length && gem.length) {
-                    const byId5 = {}, byIdG = {};
-                    for (const c of g5) byId5[c.rubric_id] = c.grader;
-                    for (const c of gem) byIdG[c.rubric_id] = c.grader;
-                    for (const k of Object.keys(byId5)) if (k in byIdG) ggP.push([byId5[k], byIdG[k]]);
-                }
-            }
-        }
-        const agr = pairs => { const v = pairs.filter(([a,b]) => a!=null&&b!=null); return v.length ? v.filter(([a,b])=>a===b).length/v.length*100 : 0; };
-        hg = agr(hgP); hgem = agr(hgemP); gg = agr(ggP);
-        hasGrader = true;
-    }
-
-    return {
-        total: tasks.length, domains, inputTypes, outputTypes,
-        inputFilesPerTask, outputFilesPerTask, rubricsPerTask, criticalPerTask,
-        modelGrades, hasGrader, hg, hgem, gg,
-    };
-}
-
-// ---------- Chart rendering ----------
-function renderDashboard(s, title) {
-    document.getElementById('dashboard-title').textContent = title;
-    const T = s.total;
-
-    // 1 — Domain Distribution
-    const domItems = topN(s.domains, 10);
-    const domNames = domItems.map(d => d[0].length > 20 ? d[0].slice(0,20)+'...' : d[0]).reverse();
-    const domPcts  = domItems.map(d => d[1]/T*100).reverse();
-    Plotly.newPlot('chart1', [{
-        type:'bar', orientation:'h', y:domNames, x:domPcts,
-        marker:{color:COLORS.lavender}, text:domPcts.map(v=>`${v.toFixed(1)}%`),
-        textposition:'outside', textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
-    }], baseLayout('Domain Distribution', {
-        xaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        yaxis:{gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        margin:{t:44,b:42,l:120,r:50},
-    }), PLOTLY_CFG);
-
-    // 2 — Input File Type Distribution
-    const inItems = topN(s.inputTypes, 10);
-    const inNames = inItems.map(d=>d[0]).reverse();
-    const inPcts  = inItems.map(d=>d[1]/T*100).reverse();
-    const inColors = inItems.map((_,i)=>i===inItems.length-1?COLORS.orange:COLORS.blue).reverse();
-    Plotly.newPlot('chart2', [{
-        type:'bar', orientation:'h', y:inNames, x:inPcts,
-        marker:{color:inColors}, text:inPcts.map(v=>`${v.toFixed(1)}%`),
-        textposition:'outside', textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
-    }], baseLayout('Input File Type Distribution', {
-        xaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        yaxis:{gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        margin:{t:44,b:42,l:80,r:50},
-    }), PLOTLY_CFG);
-
-    // 3 — Output File Type Distribution
-    const outItems = topN(s.outputTypes, 10);
-    const outNames = outItems.map(d=>d[0]).reverse();
-    const outPcts  = outItems.map(d=>d[1]/T*100).reverse();
-    Plotly.newPlot('chart3', [{
-        type:'bar', orientation:'h', y:outNames, x:outPcts,
-        marker:{color:COLORS.orange}, text:outPcts.map(v=>`${v.toFixed(1)}%`),
-        textposition:'outside', textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
-    }], baseLayout('Output File Type Distribution', {
-        xaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        yaxis:{gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        margin:{t:44,b:42,l:80,r:50},
-    }), PLOTLY_CFG);
-
-    // 4 — Input Files per Task
-    const inFC = counter(s.inputFilesPerTask);
-    const inFX = Object.keys(inFC).map(Number).sort((a,b)=>a-b);
-    const inFY = inFX.map(x=>inFC[x]/T*100);
-    Plotly.newPlot('chart4', [{
-        type:'bar', x:inFX, y:inFY, marker:{color:COLORS.orange},
-        text:inFY.map(v=>v>3?`${v.toFixed(0)}%`:''), textposition:'outside',
-        textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
-    }], baseLayout(`Input Files/Task<br><span style="font-size:10px">(avg: ${mean(s.inputFilesPerTask).toFixed(2)})</span>`, {
-        xaxis:{title:'# Input Files',dtick:1,gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        yaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        margin:{t:54,b:42,l:40,r:12},
-    }), PLOTLY_CFG);
-
-    // 5 — Output Files per Task
-    const outFC = counter(s.outputFilesPerTask);
-    const outFX = Object.keys(outFC).map(Number).sort((a,b)=>a-b);
-    const outFY = outFX.map(x=>outFC[x]/T*100);
-    Plotly.newPlot('chart5', [{
-        type:'bar', x:outFX, y:outFY, marker:{color:COLORS.orange},
-        text:outFY.map(v=>v>3?`${v.toFixed(0)}%`:''), textposition:'outside',
-        textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
-    }], baseLayout(`Output Files/Task<br><span style="font-size:10px">(avg: ${mean(s.outputFilesPerTask).toFixed(2)})</span>`, {
-        xaxis:{title:'# Output Files',dtick:1,gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        yaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        margin:{t:54,b:42,l:40,r:12},
-    }), PLOTLY_CFG);
-
-    // 6 — Total Rubrics per Task
-    const rC = counter(s.rubricsPerTask);
-    const rX = Object.keys(rC).map(Number).sort((a,b)=>a-b);
-    const rY = rX.map(x=>rC[x]);
-    Plotly.newPlot('chart6', [{
-        type:'bar', x:rX, y:rY, marker:{color:COLORS.blue, opacity:0.9},
-    }], baseLayout(`Total Rubrics per Task<br><span style="font-size:10px">(avg: ${mean(s.rubricsPerTask).toFixed(1)})</span>`, {
-        xaxis:{title:'# of Rubrics',dtick:Math.max(1,Math.floor((Math.max(...rX)-Math.min(...rX))/10)),gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        yaxis:{title:'# of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        margin:{t:54,b:42,l:50,r:24},
-    }), PLOTLY_CFG);
-
-    // 7 — Critical Rubrics per Task
-    const cC = counter(s.criticalPerTask);
-    const cX = Object.keys(cC).map(Number).sort((a,b)=>a-b);
-    const cY = cX.map(x=>cC[x]);
-    Plotly.newPlot('chart7', [{
-        type:'bar', x:cX, y:cY, marker:{color:COLORS.red, opacity:0.9},
-    }], baseLayout(`Critical Rubrics per Task<br><span style="font-size:10px">(avg: ${mean(s.criticalPerTask).toFixed(1)})</span>`, {
-        xaxis:{title:'# of Critical Rubrics',dtick:1,gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        yaxis:{title:'# of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        margin:{t:54,b:42,l:50,r:24},
-    }), PLOTLY_CFG);
-
-    // 8 — Weighted Grade box plot
-    const mNames = Object.keys(s.modelGrades);
-    const boxTraces = mNames.map((m, i) => ({
-        type:'box', y:s.modelGrades[m], name:m, boxmean:true,
-        marker:{color:[COLORS.blue,COLORS.orange,COLORS.green,COLORS.cyan][i%4]},
-        fillcolor:[COLORS.blue,COLORS.orange,COLORS.green,COLORS.cyan][i%4]+'CC',
-        line:{color:'white'},
-    }));
-    const boxAnnotations = mNames.map((m, i) => ({
-        x:m, y:mean(s.modelGrades[m]),
-        text:`μ=${mean(s.modelGrades[m]).toFixed(1)}%`, showarrow:false,
-        font:{size:11,color:'white',weight:700},
-        bgcolor:[COLORS.blue,COLORS.orange,COLORS.green,COLORS.cyan][i%4],
-        borderpad:4, borderwidth:0, opacity:0.92,
-    }));
-    Plotly.newPlot('chart8', boxTraces, baseLayout('Weighted Grade<br><span style="font-size:10px">(points earned / total points)</span>', {
-        yaxis:{title:'Score (%)',range:[0,110],gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        xaxis:{gridcolor:'#30363d',zerolinecolor:'#30363d'},
-        showlegend:false, annotations:boxAnnotations,
-        margin:{t:54,b:42,l:50,r:24},
-    }), PLOTLY_CFG);
-
-    // 9 — Grader Agreement Matrix
-    if (s.hasGrader) {
-        const graders = ['GPT','Gemini Pro','Human'];
-        const matrix = [[100,s.gg,s.hg],[s.gg,100,s.hgem],[s.hg,s.hgem,100]];
-        const annots = [];
-        for (let i=0;i<3;i++) for (let j=0;j<3;j++) annots.push({
-            x:graders[j], y:graders[i], text:`${matrix[i][j].toFixed(0)}%`, showarrow:false,
-            font:{size:13,color:matrix[i][j]<85?'white':'black',weight:700},
+    function readFile(file) {
+        return new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result);
+            r.onerror = reject;
+            r.readAsText(file);
         });
-        Plotly.newPlot('chart9', [{
-            type:'heatmap', z:matrix, x:graders, y:graders,
-            colorscale:'Greens', zmin:50, zmax:100, showscale:false,
-        }], baseLayout('Grader Agreement Matrix (%)', {
-            xaxis:{side:'bottom',gridcolor:'#30363d',zerolinecolor:'#30363d'},
-            yaxis:{autorange:'reversed',gridcolor:'#30363d',zerolinecolor:'#30363d'},
-            annotations:annots, margin:{t:44,b:42,l:90,r:24},
-        }), PLOTLY_CFG);
-    } else {
-        Plotly.newPlot('chart9', [], baseLayout('Grader Agreement Matrix (%)', {
-            xaxis:{visible:false}, yaxis:{visible:false},
-            annotations:[{x:0.5,y:0.5,xref:'paper',yref:'paper',text:'No grader data provided',
-                showarrow:false,font:{size:14,color:'#8b949e'}}],
-        }), PLOTLY_CFG);
-    }
-}
-
-// ---------- PNG download ----------
-async function downloadPNG(title) {
-    const W = 3600, H = 2100;
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#0d1117';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 36px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(title, W / 2, 54);
-
-    const positions = [
-        {x:30,  y:80,  w:865, h:960},  {x:915, y:80,  w:865, h:960},
-        {x:1800,y:80,  w:865, h:960},  {x:2685,y:80,  w:430, h:960},
-        {x:3135,y:80,  w:430, h:960},
-        {x:30,  y:1070,w:865, h:960},  {x:915, y:1070,w:865, h:960},
-        {x:1800,y:1070,w:865, h:960},  {x:2685,y:1070,w:865, h:960},
-    ];
-    const ids = ['chart1','chart2','chart3','chart4','chart5','chart6','chart7','chart8','chart9'];
-
-    for (let i = 0; i < ids.length; i++) {
-        const p = positions[i];
-        const src = await Plotly.toImage(ids[i], { format:'png', width:p.w, height:p.h });
-        const img = new Image();
-        await new Promise(r => { img.onload = r; img.src = src; });
-        ctx.drawImage(img, p.x, p.y, p.w, p.h);
     }
 
-    const link = document.createElement('a');
-    const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
-    link.download = `dashboard_${ts}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-}
-
-// ---------- Event wiring ----------
-document.querySelectorAll('.upload-card input[type="file"]').forEach(input => {
-    input.addEventListener('change', () => {
-        const card = document.getElementById(input.dataset.card);
-        const fn = card.querySelector('.upload-filename');
-        if (input.files.length) { card.classList.add('has-file'); fn.textContent = input.files[0].name; }
-        else { card.classList.remove('has-file'); fn.textContent = ''; }
+    // File-card feedback
+    document.querySelectorAll('.upload-card input[type="file"]').forEach(input => {
+        input.addEventListener('change', () => {
+            const card = document.getElementById(input.dataset.card);
+            const fn = card.querySelector('.upload-filename');
+            if (input.files.length) { card.classList.add('has-file'); fn.textContent = input.files[0].name; }
+            else { card.classList.remove('has-file'); fn.textContent = ''; }
+        });
     });
-});
 
-let lastTitle = '';
+    document.getElementById('dash-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const status = document.getElementById('status');
+        const btn = document.getElementById('btn-gen');
+        const result = document.getElementById('result');
+        const resultImg = document.getElementById('result-img');
+        const btnDl = document.getElementById('btn-dl');
+        const form = e.target;
 
-document.getElementById('dash-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const status = document.getElementById('status');
-    const btn = document.getElementById('btn-gen');
-    const form = e.target;
+        const deliveryInput = form.querySelector('[name="delivery"]');
+        const mimeInput     = form.querySelector('[name="mime_csv"]');
+        const graderInput   = form.querySelector('[name="grader"]');
+        const ocrInput      = form.querySelector('[name="ocr"]');
 
-    const deliveryInput = form.querySelector('[name="delivery"]');
-    const mimeInput     = form.querySelector('[name="mime_csv"]');
-    const graderInput   = form.querySelector('[name="grader"]');
-    const ocrInput      = form.querySelector('[name="ocr"]');
+        const missing = [];
+        if (!deliveryInput.files.length) missing.push('Delivery JSONL');
+        if (!mimeInput.files.length)     missing.push('DAMM Tasks CSV');
+        if (missing.length) {
+            status.innerHTML = `<span class="msg error">Missing: ${missing.join(', ')}</span>`;
+            return;
+        }
 
-    const missing = [];
-    if (!deliveryInput.files.length) missing.push('Delivery JSONL');
-    if (!mimeInput.files.length)     missing.push('DAMM Tasks CSV');
-    if (missing.length) {
-        status.innerHTML = `<span class="msg error">Missing: ${missing.join(', ')}</span>`;
-        return;
-    }
+        btn.disabled = true;
+        result.classList.remove('visible');
 
-    btn.disabled = true;
-    status.innerHTML = '<span class="spinner"></span><span class="msg">Parsing files&hellip;</span>';
+        try {
+            await ensurePyodide(status);
 
-    try {
-        const [deliveryText, mimeText] = await Promise.all([
-            readFile(deliveryInput.files[0]),
-            readFile(mimeInput.files[0]),
-        ]);
-        const graderText = graderInput.files.length ? await readFile(graderInput.files[0]) : null;
+            status.innerHTML = '<span class="spinner"></span><span class="msg">Reading files&hellip;</span>';
+            const [deliveryText, csvText] = await Promise.all([
+                readFile(deliveryInput.files[0]),
+                readFile(mimeInput.files[0]),
+            ]);
+            const graderText = graderInput.files.length ? await readFile(graderInput.files[0]) : '';
+            const ocrText    = ocrInput.files.length    ? await readFile(ocrInput.files[0])    : '';
+            const titleVal   = form.querySelector('[name="title"]').value.trim();
 
-        status.innerHTML = '<span class="spinner"></span><span class="msg">Computing statistics&hellip;</span>';
-        await new Promise(r => setTimeout(r, 20));
+            pyodide.globals.set('_delivery', deliveryText);
+            pyodide.globals.set('_csv', csvText);
+            pyodide.globals.set('_grader', graderText);
+            pyodide.globals.set('_ocr', ocrText);
+            pyodide.globals.set('_title', titleVal);
 
-        const tasks    = parseDelivery(deliveryText);
-        const mimeData = parseDAMM(mimeText);
-        const graderD  = parseGrader(graderText);
+            status.innerHTML = '<span class="spinner"></span><span class="msg">Generating dashboard (matplotlib)&hellip;</span>';
+            await new Promise(r => setTimeout(r, 50));
 
-        if (!tasks.length) throw new Error('delivery.jsonl contained 0 tasks');
+            const b64 = await pyodide.runPythonAsync(`
+import base64
+_png = generate_dashboard(
+    delivery_bytes=_delivery,
+    mime_csv_bytes=_csv,
+    grader_bytes=_grader if _grader else None,
+    ocr_bytes=_ocr if _ocr else None,
+    title=_title if _title else None,
+)
+base64.b64encode(_png).decode('utf-8')
+`);
 
-        const stats = computeStats(tasks, mimeData, graderD);
+            const dataUrl = 'data:image/png;base64,' + b64;
+            resultImg.src = dataUrl;
+            btnDl.href = dataUrl;
 
-        const now = new Date();
-        const titleStr = form.querySelector('[name="title"]').value.trim()
-            || `${stats.total} Task Delivery (${now.getMonth()+1}/${String(now.getDate()).padStart(2,'0')}/${now.getFullYear()})`;
-        lastTitle = titleStr;
+            const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
+            btnDl.download = `dashboard_${ts}.png`;
 
-        status.innerHTML = '<span class="spinner"></span><span class="msg">Rendering charts&hellip;</span>';
-        await new Promise(r => setTimeout(r, 20));
-
-        renderDashboard(stats, titleStr);
-
-        document.getElementById('dashboard-section').classList.add('visible');
-        document.getElementById('dashboard-section').scrollIntoView({ behavior: 'smooth' });
-        status.innerHTML = '<span class="msg" style="color:#3fb950;">Dashboard ready!</span>';
-    } catch (err) {
-        status.innerHTML = `<span class="msg error">${err.message}</span>`;
-    } finally {
-        btn.disabled = false;
-    }
-});
-
-document.getElementById('btn-dl').addEventListener('click', async () => {
-    const btn = document.getElementById('btn-dl');
-    btn.textContent = 'Exporting…';
-    btn.disabled = true;
-    try { await downloadPNG(lastTitle); }
-    catch (err) { alert('Download failed: ' + err.message); }
-    finally { btn.textContent = 'Download PNG'; btn.disabled = false; }
-});
+            result.classList.add('visible');
+            result.scrollIntoView({ behavior: 'smooth' });
+            status.innerHTML = '<span class="msg" style="color:#3fb950;">Dashboard ready!</span>';
+        } catch (err) {
+            status.innerHTML = `<span class="msg error">${err.message}</span>`;
+        } finally {
+            btn.disabled = false;
+        }
+    });
 </script>
 </body>
 </html>
