@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# Data files — users upload these via the UI
+*.jsonl
+*.csv
+*.json
+!requirements.txt
+
+# Generated dashboards
+dashboard_*.png
+
+# Virtualenv
+venv/
+.venv/
