@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Generator</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            min-height: 100vh;
+        }
+
+        header {
+            width: 100%;
+            padding: 28px 0 20px;
+            text-align: center;
+            border-bottom: 1px solid #21262d;
+            background: #161b22;
+        }
+        header h1 { font-size: 1.6rem; font-weight: 700; color: #f0f6fc; letter-spacing: -0.02em; }
+        header p  { margin-top: 6px; font-size: 0.88rem; color: #8b949e; }
+
+        .form-wrapper {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 36px 24px 0;
+        }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .upload-card {
+            background: #161b22;
+            border: 1.5px dashed #30363d;
+            border-radius: 10px;
+            padding: 22px 18px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            position: relative;
+        }
+        .upload-card:hover { border-color: #58a6ff; background: #1a2030; }
+        .upload-card.has-file { border-color: #3fb950; border-style: solid; }
+        .upload-card.optional { opacity: 0.75; }
+        .upload-card.optional:hover { opacity: 1; }
+        .upload-card input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+        .upload-icon  { font-size: 1.8rem; margin-bottom: 8px; display: block; }
+        .upload-label { font-size: 0.85rem; font-weight: 600; color: #f0f6fc; display: block; margin-bottom: 4px; }
+        .upload-hint  { font-size: 0.72rem; color: #8b949e; }
+        .upload-filename { font-size: 0.75rem; color: #3fb950; margin-top: 8px; word-break: break-all; display: none; }
+        .upload-card.has-file .upload-filename { display: block; }
+        .upload-card.has-file .upload-hint { display: none; }
+
+        .badge { position: absolute; top: 10px; right: 12px; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 4px; }
+        .badge.required { background: #da3633; color: #fff; }
+        .badge.opt      { background: #30363d; color: #8b949e; }
+
+        .title-row { margin-bottom: 24px; }
+        .title-row label { font-size: 0.82rem; font-weight: 600; color: #c9d1d9; display: block; margin-bottom: 6px; }
+        .title-row input {
+            width: 100%; background: #0d1117; border: 1.5px solid #30363d; border-radius: 8px;
+            padding: 10px 14px; font-size: 0.88rem; color: #f0f6fc; outline: none; transition: border-color 0.2s;
+        }
+        .title-row input:focus { border-color: #58a6ff; }
+        .title-row input::placeholder { color: #484f58; }
+
+        .btn-generate {
+            width: 100%; padding: 14px;
+            background: linear-gradient(135deg, #8B5CF6, #6D28D9);
+            color: #fff; font-size: 0.95rem; font-weight: 700;
+            border: none; border-radius: 10px; cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .btn-generate:hover { opacity: 0.92; }
+        .btn-generate:active { transform: scale(0.995); }
+        .btn-generate:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+        .status-bar { text-align: center; margin-top: 16px; min-height: 22px; }
+        .status-bar .spinner {
+            display: inline-block; width: 18px; height: 18px;
+            border: 2.5px solid #30363d; border-top-color: #8B5CF6; border-radius: 50%;
+            animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .status-bar .msg { font-size: 0.82rem; vertical-align: middle; }
+        .status-bar .msg.error { color: #f85149; }
+
+        /* Dashboard area */
+        .dashboard-section { display: none; padding: 24px; }
+        .dashboard-section.visible { display: block; }
+
+        .dashboard-title {
+            text-align: center; font-size: 1.3rem; font-weight: 700; color: #f0f6fc;
+            margin-bottom: 16px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: 380px 380px;
+            gap: 8px;
+            min-width: 1100px;
+        }
+        .dashboard-scroll { overflow-x: auto; }
+
+        .chart-cell { background: #0d1117; border-radius: 6px; min-height: 0; }
+        .c1 { grid-column: 1 / 3; }
+        .c2 { grid-column: 3 / 5; }
+        .c3 { grid-column: 5 / 7; }
+        .c4 { grid-column: 7 / 8; }
+        .c5 { grid-column: 8 / 9; }
+        .c6 { grid-column: 1 / 3; }
+        .c7 { grid-column: 3 / 5; }
+        .c8 { grid-column: 5 / 7; }
+        .c9 { grid-column: 7 / 9; }
+
+        .btn-row { text-align: center; margin-top: 24px; padding-bottom: 40px; }
+        .btn-download {
+            display: inline-block; padding: 12px 32px; background: #238636; color: #fff;
+            font-size: 0.9rem; font-weight: 600; border: none; border-radius: 8px;
+            cursor: pointer; transition: opacity 0.2s; text-decoration: none;
+        }
+        .btn-download:hover { opacity: 0.88; }
+
+        @media (max-width: 560px) { .upload-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Dashboard Generator</h1>
+    <p>Upload your data files and generate the delivery dashboard — runs entirely in your browser</p>
+</header>
+
+<div class="form-wrapper">
+    <form id="dash-form">
+        <div class="upload-grid">
+            <div class="upload-card" id="card-delivery">
+                <span class="badge required">Required</span>
+                <input type="file" name="delivery" accept=".jsonl" data-card="card-delivery">
+                <span class="upload-icon">&#128203;</span>
+                <span class="upload-label">Delivery JSONL</span>
+                <span class="upload-hint">delivery.jsonl &mdash; main task data</span>
+                <span class="upload-filename"></span>
+            </div>
+            <div class="upload-card" id="card-mime">
+                <span class="badge required">Required</span>
+                <input type="file" name="mime_csv" accept=".csv" data-card="card-mime">
+                <span class="upload-icon">&#128200;</span>
+                <span class="upload-label">DAMM Tasks CSV</span>
+                <span class="upload-hint">DAMM_Tasks_*.csv &mdash; MIME types</span>
+                <span class="upload-filename"></span>
+            </div>
+            <div class="upload-card optional" id="card-grader">
+                <span class="badge opt">Optional</span>
+                <input type="file" name="grader" accept=".jsonl" data-card="card-grader">
+                <span class="upload-icon">&#9989;</span>
+                <span class="upload-label">Grader Results JSONL</span>
+                <span class="upload-hint">grader_results_*.jsonl &mdash; agreement data</span>
+                <span class="upload-filename"></span>
+            </div>
+            <div class="upload-card optional" id="card-ocr">
+                <span class="badge opt">Optional</span>
+                <input type="file" name="ocr" accept=".json" data-card="card-ocr">
+                <span class="upload-icon">&#128269;</span>
+                <span class="upload-label">OCR Classification JSON</span>
+                <span class="upload-hint">ocr_classification_*.json</span>
+                <span class="upload-filename"></span>
+            </div>
+        </div>
+        <div class="title-row">
+            <label for="title-input">Dashboard Title (optional)</label>
+            <input type="text" id="title-input" name="title" placeholder="e.g. 53 Task Delivery (3/02/2026)">
+        </div>
+        <button type="submit" class="btn-generate" id="btn-gen">Generate Dashboard</button>
+        <div class="status-bar" id="status"></div>
+    </form>
+</div>
+
+<div class="dashboard-section" id="dashboard-section">
+    <div class="dashboard-title" id="dashboard-title"></div>
+    <div class="dashboard-scroll">
+        <div class="dashboard-grid">
+            <div class="chart-cell c1" id="chart1"></div>
+            <div class="chart-cell c2" id="chart2"></div>
+            <div class="chart-cell c3" id="chart3"></div>
+            <div class="chart-cell c4" id="chart4"></div>
+            <div class="chart-cell c5" id="chart5"></div>
+            <div class="chart-cell c6" id="chart6"></div>
+            <div class="chart-cell c7" id="chart7"></div>
+            <div class="chart-cell c8" id="chart8"></div>
+            <div class="chart-cell c9" id="chart9"></div>
+        </div>
+    </div>
+    <div class="btn-row">
+        <button class="btn-download" id="btn-dl">Download PNG</button>
+    </div>
+</div>
+
+<script>
+const COLORS = {
+    lavender: '#A78BFA', orange: '#F97316', blue: '#3B82F6',
+    red: '#EF4444', green: '#10B981', cyan: '#06B6D4',
+};
+const PLOTLY_CFG = { displayModeBar: false, responsive: true };
+
+function baseLayout(title, extra) {
+    return Object.assign({
+        title: { text: title, font: { size: 13, color: '#f0f6fc' }, x: 0.5 },
+        paper_bgcolor: '#0d1117', plot_bgcolor: '#161b22',
+        font: { color: '#c9d1d9', family: '-apple-system, BlinkMacSystemFont, sans-serif', size: 11 },
+        margin: { t: 44, b: 42, l: 50, r: 24 },
+        xaxis: { gridcolor: '#30363d', zerolinecolor: '#30363d' },
+        yaxis: { gridcolor: '#30363d', zerolinecolor: '#30363d' },
+    }, extra || {});
+}
+
+const mean = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+
+function topN(obj, n) {
+    return Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
+function counter(arr) {
+    const c = {};
+    for (const v of arr) c[v] = (c[v] || 0) + 1;
+    return c;
+}
+
+function readFile(file) {
+    return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsText(file);
+    });
+}
+
+// ---------- MIME helper ----------
+const MIME_MAP = {
+    'text/csv': 'CSV', 'application/json': 'JSON', 'application/pdf': 'PDF',
+    'application/x-zip-compressed': 'X-ZIP-COMP', 'application/zip': 'ZIP',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+    'image/png': 'PNG', 'image/jpeg': 'JPEG',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+};
+function mimeShort(m) {
+    if (MIME_MAP[m]) return MIME_MAP[m];
+    if (!m) return 'Unknown';
+    return (m.split('/').pop() || '').toUpperCase().slice(0, 10);
+}
+
+// ---------- Parsers ----------
+function parseDelivery(text) {
+    return text.split('\n').map(l => l.trim()).filter(Boolean).map(l => JSON.parse(l));
+}
+
+function parseDAMM(text) {
+    const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+    const md = {};
+    for (const row of result.data) {
+        const tid = (row.TASK_ID || '').trim();
+        if (!tid) continue;
+        const inRaw = (row.ATTACHMENTS_S3_MIME_TYPE || '').trim();
+        const outRaw = (row.GOLDEN_MIME_TYPE || '').trim();
+        const inList = inRaw ? inRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
+        let outList = [];
+        if (outRaw) {
+            try { outList = JSON.parse(outRaw); } catch { outList = outRaw.split('\n').map(s => s.trim()).filter(Boolean); }
+        }
+        md[tid] = { input: inList, output: outList };
+    }
+    return md;
+}
+
+function parseGrader(text) {
+    if (!text) return null;
+    const gd = {};
+    for (const line of text.split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        try {
+            const d = JSON.parse(t);
+            const tid = d.task_id, mn = d.model_name, gr = d.grader;
+            if (!gd[tid]) gd[tid] = {};
+            if (!gd[tid][mn]) gd[tid][mn] = {};
+            gd[tid][mn][gr] = d.comparisons || [];
+        } catch {}
+    }
+    return gd;
+}
+
+// ---------- Statistics ----------
+function computeStats(tasks, mimeData, graderData) {
+    const domains = {}, inputTypes = {}, outputTypes = {};
+    const inputFilesPerTask = [], outputFilesPerTask = [];
+    const rubricsPerTask = [], criticalPerTask = [];
+    const modelGrades = {};
+
+    for (const task of tasks) {
+        const tid = task.task_id;
+        const dom = (task.metadata || {}).domain || 'Unknown';
+        domains[dom] = (domains[dom] || 0) + 1;
+
+        if (mimeData[tid]) {
+            const il = mimeData[tid].input;
+            inputFilesPerTask.push(il.length);
+            for (const m of il) { const s = mimeShort(m); inputTypes[s] = (inputTypes[s] || 0) + 1; }
+
+            let ol = mimeData[tid].output;
+            if (!ol.length) {
+                const gu = ((task.golden_solution || {}).solution_attachments || []);
+                outputFilesPerTask.push(gu.length);
+                for (const _ of gu) outputTypes['Unknown'] = (outputTypes['Unknown'] || 0) + 1;
+            } else {
+                outputFilesPerTask.push(ol.length);
+                for (const m of ol) { const s = mimeShort(m); outputTypes[s] = (outputTypes[s] || 0) + 1; }
+            }
+        }
+
+        const rubrics = task.rubrics || [];
+        rubricsPerTask.push(rubrics.length);
+        criticalPerTask.push(rubrics.filter(r => r.critical_classification === 'critical criteria').length);
+
+        const nonCrit = rubrics.filter(r => r.critical_classification !== 'critical criteria');
+        const totalPts = nonCrit.reduce((s, r) => s + (r.max_points || 0), 0);
+        const lookup = {}; for (const r of rubrics) lookup[r.id] = r;
+
+        for (const out of (task.model_outputs || [])) {
+            if (out.model_name === 'GPT5') continue;
+            const gm = {}; for (const g of (out.rubric_grades || [])) gm[g.criteria_id] = g;
+            let earned = 0;
+            for (const [rid, g] of Object.entries(gm)) {
+                if (g.is_satisfied === 'True' && lookup[rid] && lookup[rid].critical_classification !== 'critical criteria')
+                    earned += lookup[rid].max_points || 0;
+            }
+            if (totalPts > 0) {
+                if (!modelGrades[out.model_name]) modelGrades[out.model_name] = [];
+                modelGrades[out.model_name].push(earned / totalPts * 100);
+            }
+        }
+    }
+
+    let hasGrader = false, hg = 0, hgem = 0, gg = 0;
+    if (graderData) {
+        const hgP = [], hgemP = [], ggP = [];
+        for (const models of Object.values(graderData)) {
+            for (const gr of Object.values(models)) {
+                const g5 = gr.gpt52 || [], gem = gr.gemini3pro || gr.gemini3flash || [];
+                for (const c of g5) hgP.push([c.existing, c.grader]);
+                for (const c of gem) hgemP.push([c.existing, c.grader]);
+                if (g5.length && gem.length) {
+                    const byId5 = {}, byIdG = {};
+                    for (const c of g5) byId5[c.rubric_id] = c.grader;
+                    for (const c of gem) byIdG[c.rubric_id] = c.grader;
+                    for (const k of Object.keys(byId5)) if (k in byIdG) ggP.push([byId5[k], byIdG[k]]);
+                }
+            }
+        }
+        const agr = pairs => { const v = pairs.filter(([a,b]) => a!=null&&b!=null); return v.length ? v.filter(([a,b])=>a===b).length/v.length*100 : 0; };
+        hg = agr(hgP); hgem = agr(hgemP); gg = agr(ggP);
+        hasGrader = true;
+    }
+
+    return {
+        total: tasks.length, domains, inputTypes, outputTypes,
+        inputFilesPerTask, outputFilesPerTask, rubricsPerTask, criticalPerTask,
+        modelGrades, hasGrader, hg, hgem, gg,
+    };
+}
+
+// ---------- Chart rendering ----------
+function renderDashboard(s, title) {
+    document.getElementById('dashboard-title').textContent = title;
+    const T = s.total;
+
+    // 1 — Domain Distribution
+    const domItems = topN(s.domains, 10);
+    const domNames = domItems.map(d => d[0].length > 20 ? d[0].slice(0,20)+'...' : d[0]).reverse();
+    const domPcts  = domItems.map(d => d[1]/T*100).reverse();
+    Plotly.newPlot('chart1', [{
+        type:'bar', orientation:'h', y:domNames, x:domPcts,
+        marker:{color:COLORS.lavender}, text:domPcts.map(v=>`${v.toFixed(1)}%`),
+        textposition:'outside', textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
+    }], baseLayout('Domain Distribution', {
+        xaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        yaxis:{gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        margin:{t:44,b:42,l:120,r:50},
+    }), PLOTLY_CFG);
+
+    // 2 — Input File Type Distribution
+    const inItems = topN(s.inputTypes, 10);
+    const inNames = inItems.map(d=>d[0]).reverse();
+    const inPcts  = inItems.map(d=>d[1]/T*100).reverse();
+    const inColors = inItems.map((_,i)=>i===inItems.length-1?COLORS.orange:COLORS.blue).reverse();
+    Plotly.newPlot('chart2', [{
+        type:'bar', orientation:'h', y:inNames, x:inPcts,
+        marker:{color:inColors}, text:inPcts.map(v=>`${v.toFixed(1)}%`),
+        textposition:'outside', textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
+    }], baseLayout('Input File Type Distribution', {
+        xaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        yaxis:{gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        margin:{t:44,b:42,l:80,r:50},
+    }), PLOTLY_CFG);
+
+    // 3 — Output File Type Distribution
+    const outItems = topN(s.outputTypes, 10);
+    const outNames = outItems.map(d=>d[0]).reverse();
+    const outPcts  = outItems.map(d=>d[1]/T*100).reverse();
+    Plotly.newPlot('chart3', [{
+        type:'bar', orientation:'h', y:outNames, x:outPcts,
+        marker:{color:COLORS.orange}, text:outPcts.map(v=>`${v.toFixed(1)}%`),
+        textposition:'outside', textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
+    }], baseLayout('Output File Type Distribution', {
+        xaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        yaxis:{gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        margin:{t:44,b:42,l:80,r:50},
+    }), PLOTLY_CFG);
+
+    // 4 — Input Files per Task
+    const inFC = counter(s.inputFilesPerTask);
+    const inFX = Object.keys(inFC).map(Number).sort((a,b)=>a-b);
+    const inFY = inFX.map(x=>inFC[x]/T*100);
+    Plotly.newPlot('chart4', [{
+        type:'bar', x:inFX, y:inFY, marker:{color:COLORS.orange},
+        text:inFY.map(v=>v>3?`${v.toFixed(0)}%`:''), textposition:'outside',
+        textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
+    }], baseLayout(`Input Files/Task<br><span style="font-size:10px">(avg: ${mean(s.inputFilesPerTask).toFixed(2)})</span>`, {
+        xaxis:{title:'# Input Files',dtick:1,gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        yaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        margin:{t:54,b:42,l:40,r:12},
+    }), PLOTLY_CFG);
+
+    // 5 — Output Files per Task
+    const outFC = counter(s.outputFilesPerTask);
+    const outFX = Object.keys(outFC).map(Number).sort((a,b)=>a-b);
+    const outFY = outFX.map(x=>outFC[x]/T*100);
+    Plotly.newPlot('chart5', [{
+        type:'bar', x:outFX, y:outFY, marker:{color:COLORS.orange},
+        text:outFY.map(v=>v>3?`${v.toFixed(0)}%`:''), textposition:'outside',
+        textfont:{size:9,color:'#c9d1d9'}, cliponaxis:false,
+    }], baseLayout(`Output Files/Task<br><span style="font-size:10px">(avg: ${mean(s.outputFilesPerTask).toFixed(2)})</span>`, {
+        xaxis:{title:'# Output Files',dtick:1,gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        yaxis:{title:'% of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        margin:{t:54,b:42,l:40,r:12},
+    }), PLOTLY_CFG);
+
+    // 6 — Total Rubrics per Task
+    const rC = counter(s.rubricsPerTask);
+    const rX = Object.keys(rC).map(Number).sort((a,b)=>a-b);
+    const rY = rX.map(x=>rC[x]);
+    Plotly.newPlot('chart6', [{
+        type:'bar', x:rX, y:rY, marker:{color:COLORS.blue, opacity:0.9},
+    }], baseLayout(`Total Rubrics per Task<br><span style="font-size:10px">(avg: ${mean(s.rubricsPerTask).toFixed(1)})</span>`, {
+        xaxis:{title:'# of Rubrics',dtick:Math.max(1,Math.floor((Math.max(...rX)-Math.min(...rX))/10)),gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        yaxis:{title:'# of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        margin:{t:54,b:42,l:50,r:24},
+    }), PLOTLY_CFG);
+
+    // 7 — Critical Rubrics per Task
+    const cC = counter(s.criticalPerTask);
+    const cX = Object.keys(cC).map(Number).sort((a,b)=>a-b);
+    const cY = cX.map(x=>cC[x]);
+    Plotly.newPlot('chart7', [{
+        type:'bar', x:cX, y:cY, marker:{color:COLORS.red, opacity:0.9},
+    }], baseLayout(`Critical Rubrics per Task<br><span style="font-size:10px">(avg: ${mean(s.criticalPerTask).toFixed(1)})</span>`, {
+        xaxis:{title:'# of Critical Rubrics',dtick:1,gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        yaxis:{title:'# of Tasks',gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        margin:{t:54,b:42,l:50,r:24},
+    }), PLOTLY_CFG);
+
+    // 8 — Weighted Grade box plot
+    const mNames = Object.keys(s.modelGrades);
+    const boxTraces = mNames.map((m, i) => ({
+        type:'box', y:s.modelGrades[m], name:m, boxmean:true,
+        marker:{color:[COLORS.blue,COLORS.orange,COLORS.green,COLORS.cyan][i%4]},
+        fillcolor:[COLORS.blue,COLORS.orange,COLORS.green,COLORS.cyan][i%4]+'CC',
+        line:{color:'white'},
+    }));
+    const boxAnnotations = mNames.map((m, i) => ({
+        x:m, y:mean(s.modelGrades[m]),
+        text:`μ=${mean(s.modelGrades[m]).toFixed(1)}%`, showarrow:false,
+        font:{size:11,color:'white',weight:700},
+        bgcolor:[COLORS.blue,COLORS.orange,COLORS.green,COLORS.cyan][i%4],
+        borderpad:4, borderwidth:0, opacity:0.92,
+    }));
+    Plotly.newPlot('chart8', boxTraces, baseLayout('Weighted Grade<br><span style="font-size:10px">(points earned / total points)</span>', {
+        yaxis:{title:'Score (%)',range:[0,110],gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        xaxis:{gridcolor:'#30363d',zerolinecolor:'#30363d'},
+        showlegend:false, annotations:boxAnnotations,
+        margin:{t:54,b:42,l:50,r:24},
+    }), PLOTLY_CFG);
+
+    // 9 — Grader Agreement Matrix
+    if (s.hasGrader) {
+        const graders = ['GPT','Gemini Pro','Human'];
+        const matrix = [[100,s.gg,s.hg],[s.gg,100,s.hgem],[s.hg,s.hgem,100]];
+        const annots = [];
+        for (let i=0;i<3;i++) for (let j=0;j<3;j++) annots.push({
+            x:graders[j], y:graders[i], text:`${matrix[i][j].toFixed(0)}%`, showarrow:false,
+            font:{size:13,color:matrix[i][j]<85?'white':'black',weight:700},
+        });
+        Plotly.newPlot('chart9', [{
+            type:'heatmap', z:matrix, x:graders, y:graders,
+            colorscale:'Greens', zmin:50, zmax:100, showscale:false,
+        }], baseLayout('Grader Agreement Matrix (%)', {
+            xaxis:{side:'bottom',gridcolor:'#30363d',zerolinecolor:'#30363d'},
+            yaxis:{autorange:'reversed',gridcolor:'#30363d',zerolinecolor:'#30363d'},
+            annotations:annots, margin:{t:44,b:42,l:90,r:24},
+        }), PLOTLY_CFG);
+    } else {
+        Plotly.newPlot('chart9', [], baseLayout('Grader Agreement Matrix (%)', {
+            xaxis:{visible:false}, yaxis:{visible:false},
+            annotations:[{x:0.5,y:0.5,xref:'paper',yref:'paper',text:'No grader data provided',
+                showarrow:false,font:{size:14,color:'#8b949e'}}],
+        }), PLOTLY_CFG);
+    }
+}
+
+// ---------- PNG download ----------
+async function downloadPNG(title) {
+    const W = 3600, H = 2100;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 36px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(title, W / 2, 54);
+
+    const positions = [
+        {x:30,  y:80,  w:865, h:960},  {x:915, y:80,  w:865, h:960},
+        {x:1800,y:80,  w:865, h:960},  {x:2685,y:80,  w:430, h:960},
+        {x:3135,y:80,  w:430, h:960},
+        {x:30,  y:1070,w:865, h:960},  {x:915, y:1070,w:865, h:960},
+        {x:1800,y:1070,w:865, h:960},  {x:2685,y:1070,w:865, h:960},
+    ];
+    const ids = ['chart1','chart2','chart3','chart4','chart5','chart6','chart7','chart8','chart9'];
+
+    for (let i = 0; i < ids.length; i++) {
+        const p = positions[i];
+        const src = await Plotly.toImage(ids[i], { format:'png', width:p.w, height:p.h });
+        const img = new Image();
+        await new Promise(r => { img.onload = r; img.src = src; });
+        ctx.drawImage(img, p.x, p.y, p.w, p.h);
+    }
+
+    const link = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
+    link.download = `dashboard_${ts}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+}
+
+// ---------- Event wiring ----------
+document.querySelectorAll('.upload-card input[type="file"]').forEach(input => {
+    input.addEventListener('change', () => {
+        const card = document.getElementById(input.dataset.card);
+        const fn = card.querySelector('.upload-filename');
+        if (input.files.length) { card.classList.add('has-file'); fn.textContent = input.files[0].name; }
+        else { card.classList.remove('has-file'); fn.textContent = ''; }
+    });
+});
+
+let lastTitle = '';
+
+document.getElementById('dash-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('status');
+    const btn = document.getElementById('btn-gen');
+    const form = e.target;
+
+    const deliveryInput = form.querySelector('[name="delivery"]');
+    const mimeInput     = form.querySelector('[name="mime_csv"]');
+    const graderInput   = form.querySelector('[name="grader"]');
+    const ocrInput      = form.querySelector('[name="ocr"]');
+
+    const missing = [];
+    if (!deliveryInput.files.length) missing.push('Delivery JSONL');
+    if (!mimeInput.files.length)     missing.push('DAMM Tasks CSV');
+    if (missing.length) {
+        status.innerHTML = `<span class="msg error">Missing: ${missing.join(', ')}</span>`;
+        return;
+    }
+
+    btn.disabled = true;
+    status.innerHTML = '<span class="spinner"></span><span class="msg">Parsing files&hellip;</span>';
+
+    try {
+        const [deliveryText, mimeText] = await Promise.all([
+            readFile(deliveryInput.files[0]),
+            readFile(mimeInput.files[0]),
+        ]);
+        const graderText = graderInput.files.length ? await readFile(graderInput.files[0]) : null;
+
+        status.innerHTML = '<span class="spinner"></span><span class="msg">Computing statistics&hellip;</span>';
+        await new Promise(r => setTimeout(r, 20));
+
+        const tasks    = parseDelivery(deliveryText);
+        const mimeData = parseDAMM(mimeText);
+        const graderD  = parseGrader(graderText);
+
+        if (!tasks.length) throw new Error('delivery.jsonl contained 0 tasks');
+
+        const stats = computeStats(tasks, mimeData, graderD);
+
+        const now = new Date();
+        const titleStr = form.querySelector('[name="title"]').value.trim()
+            || `${stats.total} Task Delivery (${now.getMonth()+1}/${String(now.getDate()).padStart(2,'0')}/${now.getFullYear()})`;
+        lastTitle = titleStr;
+
+        status.innerHTML = '<span class="spinner"></span><span class="msg">Rendering charts&hellip;</span>';
+        await new Promise(r => setTimeout(r, 20));
+
+        renderDashboard(stats, titleStr);
+
+        document.getElementById('dashboard-section').classList.add('visible');
+        document.getElementById('dashboard-section').scrollIntoView({ behavior: 'smooth' });
+        status.innerHTML = '<span class="msg" style="color:#3fb950;">Dashboard ready!</span>';
+    } catch (err) {
+        status.innerHTML = `<span class="msg error">${err.message}</span>`;
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('btn-dl').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-dl');
+    btn.textContent = 'Exporting…';
+    btn.disabled = true;
+    try { await downloadPNG(lastTitle); }
+    catch (err) { alert('Download failed: ' + err.message); }
+    finally { btn.textContent = 'Download PNG'; btn.disabled = false; }
+});
+</script>
+</body>
+</html>
