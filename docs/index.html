@@ -479,7 +479,8 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes=None, ocr_by
     if model_names and any(model_grades.values()):
         box_data = [model_grades[m] for m in model_names]
         colors_list = [COLORS['blue'], COLORS['orange']][:len(model_names)]
-        bp = ax8.boxplot(box_data, tick_labels=model_names, patch_artist=True, widths=0.5)
+        bp = ax8.boxplot(box_data, patch_artist=True, widths=0.5)
+        ax8.set_xticklabels(model_names)
         for patch, color in zip(bp['boxes'], colors_list):
             patch.set_facecolor(color)
             patch.set_alpha(0.8)
