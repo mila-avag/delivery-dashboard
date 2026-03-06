@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Generator</title>
+    <title>File Gen Delivery Dash</title>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -104,14 +104,46 @@
         }
         .runtime-note.ready { color: #3fb950; }
 
+        .help-toggle {
+            display: inline-flex; align-items: center; gap: 6px;
+            margin-top: 12px; padding: 6px 14px;
+            background: #21262d; border: 1px solid #30363d; border-radius: 8px;
+            color: #8b949e; font-size: 0.78rem; font-weight: 600;
+            cursor: pointer; transition: border-color 0.2s, color 0.2s;
+        }
+        .help-toggle:hover { border-color: #58a6ff; color: #c9d1d9; }
+        .help-toggle .icon { font-size: 1rem; }
+
+        .help-panel {
+            display: none; text-align: left;
+            margin-top: 12px; padding: 16px 20px;
+            background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+            font-size: 0.82rem; line-height: 1.65; color: #c9d1d9;
+            max-width: 600px; margin-left: auto; margin-right: auto;
+        }
+        .help-panel.open { display: block; }
+        .help-panel strong { color: #f0f6fc; }
+        .help-panel a { color: #58a6ff; text-decoration: none; }
+        .help-panel a:hover { text-decoration: underline; }
+        .help-panel ul { margin: 8px 0 0 18px; }
+        .help-panel li { margin-bottom: 6px; }
+
         @media (max-width: 560px) { .upload-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
 <header>
-    <h1>Dashboard Generator</h1>
-    <p>Upload your data files and generate the delivery dashboard &mdash; runs entirely in your browser</p>
+    <h1>File Gen Delivery Dash</h1>
+    <p>Upload your data files and generate the delivery dashboard</p>
+    <button class="help-toggle" id="help-btn"><span class="icon">?</span> What files do I need?</button>
+    <div class="help-panel" id="help-panel">
+        <ul>
+            <li><strong>Delivery JSONL</strong> &mdash; Test delivery jsonl with all tasks you're planning on sending.</li>
+            <li><strong>DAMM Tasks CSV</strong> &mdash; Results from this Redash query: <a href="https://redash.scale.com/queries/276997/source#516994" target="_blank" rel="noopener">queries/276997</a> (with the tasks you will be delivering).</li>
+            <li><strong>Grader Results JSONL</strong> (optional) &mdash; Grader results for the agreement matrix.</li>
+        </ul>
+    </div>
 </header>
 
 <main>
@@ -532,6 +564,10 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes=None, ocr_by
 </script>
 
 <script>
+    document.getElementById('help-btn').addEventListener('click', () => {
+        document.getElementById('help-panel').classList.toggle('open');
+    });
+
     let pyodide = null;
     let pyReady = false;
     const runtimeNote = document.getElementById('runtime-note');
