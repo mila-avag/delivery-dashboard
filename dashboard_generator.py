@@ -188,19 +188,19 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes,
         if task_id in mime_data:
             input_list = mime_data[task_id]['input']
             input_files_per_task.append(len(input_list))
-            for mime in input_list:
-                input_types[mime_to_short(mime)] += 1
+            for t in set(mime_to_short(m) for m in input_list):
+                input_types[t] += 1
 
             output_list = mime_data[task_id]['output']
             if not output_list:
                 golden_urls = task.get('golden_solution', {}).get('solution_attachments', [])
                 output_files_per_task.append(len(golden_urls))
-                for _ in golden_urls:
+                if golden_urls:
                     output_types['Unknown'] += 1
             else:
                 output_files_per_task.append(len(output_list))
-                for mime in output_list:
-                    output_types[mime_to_short(mime)] += 1
+                for t in set(mime_to_short(m) for m in output_list):
+                    output_types[t] += 1
 
         rubrics = task.get('rubrics', [])
         rubrics_per_task.append(len(rubrics))
