@@ -188,19 +188,19 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes,
         if task_id in mime_data:
             input_list = mime_data[task_id]['input']
             input_files_per_task.append(len(input_list))
-            for t in set(mime_to_short(m) for m in input_list):
-                input_types[t] += 1
+            for mime in input_list:
+                input_types[mime_to_short(mime)] += 1
 
             output_list = mime_data[task_id]['output']
             if not output_list:
                 golden_urls = task.get('golden_solution', {}).get('solution_attachments', [])
                 output_files_per_task.append(len(golden_urls))
-                if golden_urls:
+                for _ in golden_urls:
                     output_types['Unknown'] += 1
             else:
                 output_files_per_task.append(len(output_list))
-                for t in set(mime_to_short(m) for m in output_list):
-                    output_types[t] += 1
+                for mime in output_list:
+                    output_types[mime_to_short(mime)] += 1
 
         rubrics = task.get('rubrics', [])
         rubrics_per_task.append(len(rubrics))
@@ -257,31 +257,33 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes,
 
     # 2. Input File Type Distribution
     ax2 = fig.add_subplot(gs[0, 2:4])
+    total_input_files = sum(input_types.values()) or 1
     input_items = input_types.most_common(10)
     type_names = [t[0] for t in input_items]
-    type_pcts = [t[1] / total_tasks * 100 for t in input_items]
+    type_pcts = [t[1] / total_input_files * 100 for t in input_items]
     y_pos = range(len(type_names))
     colors_list = [COLORS['orange'] if i == 0 else COLORS['blue'] for i in range(len(type_names))]
     bars = ax2.barh(y_pos, type_pcts, color=colors_list, edgecolor='white', linewidth=0.5)
     ax2.set_yticks(y_pos)
     ax2.set_yticklabels(type_names, fontsize=9)
     ax2.invert_yaxis()
-    ax2.set_xlabel('% of Tasks', fontsize=9)
+    ax2.set_xlabel('% of Files', fontsize=9)
     for bar, pct in zip(bars, type_pcts):
         ax2.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2, f'{pct:.1f}%', va='center', fontsize=7)
     ax2.set_title('Input File Type Distribution', fontsize=11, fontweight='bold', pad=5)
 
     # 3. Output File Type Distribution
     ax3 = fig.add_subplot(gs[0, 4:6])
+    total_output_files = sum(output_types.values()) or 1
     output_items = output_types.most_common(10)
     type_names = [t[0] for t in output_items]
-    type_pcts = [t[1] / total_tasks * 100 for t in output_items]
+    type_pcts = [t[1] / total_output_files * 100 for t in output_items]
     y_pos = range(len(type_names))
     bars = ax3.barh(y_pos, type_pcts, color=COLORS['orange'], edgecolor='white', linewidth=0.5)
     ax3.set_yticks(y_pos)
     ax3.set_yticklabels(type_names, fontsize=9)
     ax3.invert_yaxis()
-    ax3.set_xlabel('% of Tasks', fontsize=9)
+    ax3.set_xlabel('% of Files', fontsize=9)
     for bar, pct in zip(bars, type_pcts):
         ax3.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2, f'{pct:.1f}%', va='center', fontsize=7)
     ax3.set_title('Output File Type Distribution', fontsize=11, fontweight='bold', pad=5)
