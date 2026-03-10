@@ -168,7 +168,8 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes,
                 except json.JSONDecodeError:
                     output_list = [m.strip() for m in output_mimes.split('\n') if m.strip()]
 
-            mime_data[task_id] = {'input': input_list, 'output': output_list}
+            golden_est = row.get('GOLDEN_ESTIMATE', '').strip()
+            mime_data[task_id] = {'input': input_list, 'output': output_list, 'golden_estimate': golden_est}
 
     # --- Extract stats ---
     domains = Counter()
@@ -178,6 +179,7 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes,
     output_files_per_task = []
     rubrics_per_task = []
     critical_per_task = []
+    golden_estimates = []
     model_grades = defaultdict(list)
     model_unweighted = defaultdict(list)
 
@@ -186,6 +188,12 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes,
         domains[task.get('metadata', {}).get('domain', 'Unknown')] += 1
 
         if task_id in mime_data:
+            ge = mime_data[task_id].get('golden_estimate', '')
+            if ge:
+                try:
+                    golden_estimates.append(float(ge))
+                except ValueError:
+                    pass
             input_list = mime_data[task_id]['input']
             input_files_per_task.append(len(input_list))
             for mime in input_list:
@@ -236,9 +244,10 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes,
     if title is None:
         title = f'{total_tasks} Task Delivery ({datetime.datetime.now().strftime("%-m/%d/%Y")})'
 
-    fig = plt.figure(figsize=(24, 14))
+    fig = plt.figure(figsize=(24, 19))
     fig.suptitle(title, fontsize=18, fontweight='bold', color='white', y=0.98)
-    gs = fig.add_gridspec(2, 8, hspace=0.4, wspace=0.35, top=0.92, bottom=0.08, left=0.04, right=0.98)
+    gs = fig.add_gridspec(3, 8, hspace=0.45, wspace=0.35, top=0.94, bottom=0.05, left=0.04, right=0.98,
+                          height_ratios=[1, 1, 0.8])
 
     # 1. Domain Distribution
     ax1 = fig.add_subplot(gs[0, 0:2])
@@ -402,6 +411,31 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes,
         ax9.text(0.5, 0.5, 'No grader data provided', ha='center', va='center',
                  fontsize=12, color='#8b949e', transform=ax9.transAxes)
     ax9.set_title('Grader Agreement Matrix (%)', fontsize=11, fontweight='bold', pad=5)
+
+    # 10. Golden Estimate Distribution
+    ax10 = fig.add_subplot(gs[2, 1:7])
+    if golden_estimates:
+        bins = sorted(set(golden_estimates))
+        counts = Counter(golden_estimates)
+        bar_vals = [counts[b] for b in bins]
+        bar_labels = [str(b) if b == int(b) else f'{b:.1f}' for b in bins]
+        x_pos = range(len(bins))
+        bars = ax10.bar(x_pos, bar_vals, color=COLORS['orange'], edgecolor='white', linewidth=0.5, width=0.7)
+        ax10.set_xticks(x_pos)
+        ax10.set_xticklabels(bar_labels, fontsize=9)
+        ax10.set_xlabel('Hours (Golden Estimate)', fontsize=9)
+        ax10.set_ylabel('Number of Tasks', fontsize=9)
+        for bar, val in zip(bars, bar_vals):
+            ax10.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.2, str(val),
+                      ha='center', va='bottom', fontsize=8, color='white')
+        avg = sum(golden_estimates) / len(golden_estimates)
+        ax10.set_title(f'Golden Estimate Distribution (avg: {avg:.1f}h)', fontsize=11, fontweight='bold', pad=5)
+    else:
+        ax10.set_xticks([])
+        ax10.set_yticks([])
+        ax10.text(0.5, 0.5, 'No golden estimate data', ha='center', va='center',
+                  fontsize=12, color='#8b949e', transform=ax10.transAxes)
+        ax10.set_title('Golden Estimate Distribution', fontsize=11, fontweight='bold', pad=5)
 
     # --- Render to bytes ---
     buf = io.BytesIO()
