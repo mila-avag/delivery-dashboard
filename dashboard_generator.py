@@ -137,8 +137,8 @@ def generate_dashboard(delivery_bytes, mime_csv_bytes, grader_bytes,
             return (agreed / len(valid)) * 100, len(valid)
 
         human_gpt5 = 91.0
-        human_gemini = 90.0
-        gpt5_gemini = 92.0
+        human_gemini = 89.0
+        gpt5_gemini = 93.0
         has_grader_data = True
 
     # --- Load main task data ---
